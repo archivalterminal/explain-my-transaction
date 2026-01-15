@@ -31,12 +31,6 @@ async function withAnyProvider<T>(fn: (p: ethers.JsonRpcProvider) => Promise<T>)
   throw lastErr ?? new Error("All providers failed");
 }
 
-function getBigInt(obj: unknown, key: string): bigint | null {
-  if (!obj || typeof obj !== "object") return null;
-  const v = (obj as any)[key];
-  return typeof v === "bigint" ? v : null;
-}
-
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const tx = (url.searchParams.get("tx") || "").trim();
@@ -74,33 +68,36 @@ export async function GET(req: Request) {
     let tokenTransfers = 0;
     let approvals = 0;
 
+    // Мы НЕ используем parseLog напрямую, чтобы TS не ругался на null.
+    // Вместо этого используем try/catch и проверяем, что результат есть.
     const iface = new ethers.Interface([
       "event Transfer(address indexed from, address indexed to, uint256 value)",
       "event Approval(address indexed owner, address indexed spender, uint256 value)",
     ]);
 
     for (const log of receipt.logs as any[]) {
-      touchedContracts.add(log.address.toLowerCase());
+      if (log?.address) touchedContracts.add(String(log.address).toLowerCase());
 
       try {
         const parsed = iface.parseLog({ topics: log.topics, data: log.data });
-        if (parsed.name === "Transfer") tokenTransfers++;
-        if (parsed.name === "Approval") approvals++;
-      } catch {}
+        // 👇 ключевая правка: убеждаемся что parsed существует
+        if (!parsed) continue;
+
+        const eventName = (parsed as any).name as string | undefined;
+        if (eventName === "Transfer") tokenTransfers++;
+        if (eventName === "Approval") approvals++;
+      } catch {
+        // ignore unknown logs
+      }
     }
 
     const risk =
-      approvals > 0
-        ? "Medium"
-        : touchedContracts.size > 1
-        ? "Low–Medium"
-        : "Low";
+      approvals > 0 ? "Medium" : touchedContracts.size > 1 ? "Low–Medium" : "Low";
 
     return NextResponse.json({
       summary: isEthTransfer ? "ETH transfer" : "Contract interaction",
       basescan: basescanUrl,
       accessUnlocked: true,
-
       explanation: [
         `• From: ${short(from)}`,
         `• To: ${short(to)}`,
