@@ -7,7 +7,7 @@ const PAYMENT_ADDRESS = "0x3B5Ca729ae7D427616873f5CD0B9418243090c4c";
 // USDC на Base (Circle USDC)
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
-// 3 USDC (6 decimals) — ВАЖНО: без 3000000n (чтобы не требовать ES2020)
+// 3 USDC (6 decimals) — без 3000000n, чтобы не требовать ES2020
 const PRICE_USDC_UNITS = BigInt("3000000");
 
 // Base chainId
@@ -26,10 +26,6 @@ const RPC_URLS = [
 
 function isTxHash(x: string) {
   return /^0x[a-fA-F0-9]{64}$/.test(x);
-}
-
-function norm(addr: string) {
-  return ethers.getAddress(addr);
 }
 
 function toUSDC(v: bigint) {
@@ -52,7 +48,8 @@ async function withAnyProvider<T>(fn: (p: ethers.JsonRpcProvider) => Promise<T>)
   throw lastErr ?? new Error("All RPC providers failed");
 }
 
-function getPaidAmountFromLogs(logs: any[]) {
+// ✅ ВАЖНО: readonly any[] чтобы TypeScript не ругался на receipt.logs
+function getPaidAmountFromLogs(logs: readonly any[]) {
   const iface = new ethers.Interface([
     "event Transfer(address indexed from, address indexed to, uint256 value)",
   ]);
